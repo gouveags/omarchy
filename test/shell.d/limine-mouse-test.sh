@@ -35,6 +35,7 @@ migration_copy="$test_tmp/migration.sh"
 stub_bin="$test_tmp/bin"
 sudo_calls="$test_tmp/sudo.calls"
 mutex_log="$test_tmp/mutex.log"
+enroll_log="$test_tmp/enroll.log"
 mutex_library="$test_tmp/limine-mutex"
 mkdir -p "$stub_bin"
 
@@ -96,8 +97,17 @@ exit "$status"
 STUB
 chmod +x "$stub_bin/sudo"
 
+# Record the lock state and the directive count each time the config is re-enrolled.
+cat >"$stub_bin/limine-enroll-config" <<'STUB'
+#!/bin/bash
+
+[[ ${INSIDE_SUDO:-0} == 1 ]] || exit 94
+printf '%s|%s\n' "$(tr '\n' ' ' <"$MUTEX_LOG")" "$(grep -Fxc 'mouse: no' "$LIMINE_TEST_CONF")" >>"$ENROLL_LOG"
+STUB
+chmod +x "$stub_bin/limine-enroll-config"
+
 run_migration() {
-  SUDO_CALLS="$sudo_calls" MUTEX_LOG="$mutex_log" \
+  SUDO_CALLS="$sudo_calls" MUTEX_LOG="$mutex_log" ENROLL_LOG="$enroll_log" \
     LIMINE_TEST_CONF="$limine_conf" \
     MUTEX_CREATE_CONF="${MUTEX_CREATE_CONF:-0}" \
     MUTEX_INJECT_UPDATE="${MUTEX_INJECT_UPDATE:-0}" \
@@ -134,6 +144,7 @@ cp "$limine_conf" "$test_tmp/missing.original"
 chmod 0640 "$limine_conf"
 : >"$sudo_calls"
 : >"$mutex_log"
+: >"$enroll_log"
 MUTEX_INJECT_UPDATE=1 REQUIRE_MOUSE_BEFORE_UNLOCK=1 run_migration
 
 [[ $(active_mouse_count "$limine_conf") == 1 ]] ||
@@ -153,10 +164,16 @@ grep -Fxq '# concurrent Limine update' "$limine_conf" ||
 assert_mutex_cycle
 pass "the migration updates Limine under its mutex without losing content or metadata"
 
+[[ $(<"$enroll_log") == "lock |1" ]] ||
+  fail "the migration re-enrolls the edited config once, before unlocking" "$(<"$enroll_log")"
+pass "the migration re-enrolls the Limine config after editing it"
+
 cp "$limine_conf" "$test_tmp/after-first-run"
 : >"$sudo_calls"
 : >"$mutex_log"
+: >"$enroll_log"
 run_migration
+[[ ! -s $enroll_log ]] || fail "the migration re-enrolls a config it did not change"
 cmp -s "$test_tmp/after-first-run" "$limine_conf" ||
   fail "the migration changes Limine config on a second run"
 [[ $(active_mouse_count "$limine_conf") == 1 ]] ||

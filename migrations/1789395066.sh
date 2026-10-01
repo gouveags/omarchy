@@ -16,4 +16,6 @@ awk "
   END { exit !found }
 " "$limine_conf" && exit 0
 sed -i "1i mouse: no" "$limine_conf"
+# With ENABLE_ENROLL_LIMINE_CONFIG=yes, a config edit without re-enrolling fails the boot checksum
+limine-enroll-config
 ' _ "$limine_conf"
