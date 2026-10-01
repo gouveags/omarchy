@@ -103,6 +103,7 @@ cat >"$stub_bin/limine-enroll-config" <<'STUB'
 
 [[ ${INSIDE_SUDO:-0} == 1 ]] || exit 94
 printf '%s|%s\n' "$(tr '\n' ' ' <"$MUTEX_LOG")" "$(grep -Fxc 'mouse: no' "$LIMINE_TEST_CONF")" >>"$ENROLL_LOG"
+[[ ${ENROLL_FAIL:-0} != 1 ]]
 STUB
 chmod +x "$stub_bin/limine-enroll-config"
 
@@ -112,6 +113,7 @@ run_migration() {
     MUTEX_CREATE_CONF="${MUTEX_CREATE_CONF:-0}" \
     MUTEX_INJECT_UPDATE="${MUTEX_INJECT_UPDATE:-0}" \
     REQUIRE_MOUSE_BEFORE_UNLOCK="${REQUIRE_MOUSE_BEFORE_UNLOCK:-0}" \
+    ENROLL_FAIL="${ENROLL_FAIL:-0}" \
     PATH="$stub_bin:$PATH" \
     bash -euo pipefail "$migration_copy" >/dev/null
 }
@@ -173,7 +175,6 @@ cp "$limine_conf" "$test_tmp/after-first-run"
 : >"$mutex_log"
 : >"$enroll_log"
 run_migration
-[[ ! -s $enroll_log ]] || fail "the migration re-enrolls a config it did not change"
 cmp -s "$test_tmp/after-first-run" "$limine_conf" ||
   fail "the migration changes Limine config on a second run"
 [[ $(active_mouse_count "$limine_conf") == 1 ]] ||
@@ -184,6 +185,28 @@ if [[ -s $mutex_log ]]; then
   assert_mutex_cycle
 fi
 pass "the migration is idempotent"
+
+cat >"$limine_conf" <<'EOF'
+default_entry: 2
+
+/Omarchy
+  protocol: efi
+EOF
+: >"$sudo_calls"
+: >"$mutex_log"
+: >"$enroll_log"
+if ENROLL_FAIL=1 run_migration; then
+  fail "the migration succeeds when enrolling the config fails"
+fi
+cp "$limine_conf" "$test_tmp/after-failed-enroll"
+: >"$mutex_log"
+: >"$enroll_log"
+run_migration
+[[ $(<"$enroll_log") == "lock |1" ]] ||
+  fail "a retried migration enrolls the config a failed run edited" "$(<"$enroll_log")"
+cmp -s "$test_tmp/after-failed-enroll" "$limine_conf" ||
+  fail "a retried migration edits the config again"
+pass "a migration retried after a failed enrollment enrolls the config it edited"
 
 cat >"$limine_conf" <<'EOF'
 # mouse: yes
@@ -220,12 +243,15 @@ EOF
   chmod 0620 "$limine_conf"
   : >"$sudo_calls"
   : >"$mutex_log"
+  : >"$enroll_log"
   run_migration
 
   cmp -s "$test_tmp/explicit.original" "$limine_conf" ||
     fail "the migration changes the explicit directive: $explicit_directive"
   [[ $(stat -c '%a' "$limine_conf") == 620 ]] ||
     fail "the migration changes the mode for: $explicit_directive"
+  [[ $explicit_directive == 'mouse: no' || ! -s $enroll_log ]] ||
+    fail "the migration enrolls a config whose choice it kept: $explicit_directive"
   if [[ -s $mutex_log ]]; then
     assert_mutex_cycle
   fi
