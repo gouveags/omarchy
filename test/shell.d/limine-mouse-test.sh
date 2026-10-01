@@ -31,6 +31,7 @@ if grep -q 'OMARCHY_LIMINE_CONF' "$migration"; then
 fi
 
 limine_conf="$test_tmp/limine.conf"
+machine_marker="$test_tmp/var/lib/omarchy/migrations/1789395066"
 migration_copy="$test_tmp/migration.sh"
 stub_bin="$test_tmp/bin"
 sudo_calls="$test_tmp/sudo.calls"
@@ -43,6 +44,7 @@ mkdir -p "$stub_bin"
 # only a scratch copy so the test cannot touch the host's boot configuration.
 sed \
   -e "s|^limine_conf=/boot/limine.conf$|limine_conf=$limine_conf|" \
+  -e "s|^machine_marker=/var/lib/omarchy/migrations/1789395066$|machine_marker=$machine_marker|" \
   -e "s|^source /usr/lib/limine/limine-mutex$|source $mutex_library|" \
   "$migration" >"$migration_copy"
 
@@ -108,6 +110,9 @@ STUB
 chmod +x "$stub_bin/limine-enroll-config"
 
 run_migration() {
+  if [[ ${PRESERVE_MACHINE_MARKER:-0} != 1 ]]; then
+    rm -f "$machine_marker"
+  fi
   SUDO_CALLS="$sudo_calls" MUTEX_LOG="$mutex_log" ENROLL_LOG="$enroll_log" \
     LIMINE_TEST_CONF="$limine_conf" \
     MUTEX_CREATE_CONF="${MUTEX_CREATE_CONF:-0}" \
@@ -168,23 +173,24 @@ pass "the migration updates Limine under its mutex without losing content or met
 
 [[ $(<"$enroll_log") == "lock |1" ]] ||
   fail "the migration re-enrolls the edited config once, before unlocking" "$(<"$enroll_log")"
+[[ -f $machine_marker ]] ||
+  fail "the migration does not record machine-wide completion after enrollment"
 pass "the migration re-enrolls the Limine config after editing it"
 
 cp "$limine_conf" "$test_tmp/after-first-run"
 : >"$sudo_calls"
 : >"$mutex_log"
 : >"$enroll_log"
-run_migration
+PRESERVE_MACHINE_MARKER=1 run_migration
 cmp -s "$test_tmp/after-first-run" "$limine_conf" ||
   fail "the migration changes Limine config on a second run"
 [[ $(active_mouse_count "$limine_conf") == 1 ]] ||
   fail "the migration duplicates the mouse directive on a second run"
 [[ $(stat -c '%a' "$limine_conf") == 640 ]] ||
   fail "the migration changes the Limine config mode on a second run"
-if [[ -s $mutex_log ]]; then
-  assert_mutex_cycle
-fi
-pass "the migration is idempotent"
+[[ ! -s $sudo_calls && ! -s $mutex_log && ! -s $enroll_log ]] ||
+  fail "a later user's migration repeats the completed machine-wide repair"
+pass "the migration is idempotent across users"
 
 cat >"$limine_conf" <<'EOF'
 default_entry: 2
@@ -198,12 +204,16 @@ EOF
 if ENROLL_FAIL=1 run_migration; then
   fail "the migration succeeds when enrolling the config fails"
 fi
+[[ ! -e $machine_marker ]] ||
+  fail "the migration records machine-wide completion after failed enrollment"
 cp "$limine_conf" "$test_tmp/after-failed-enroll"
 : >"$mutex_log"
 : >"$enroll_log"
-run_migration
+PRESERVE_MACHINE_MARKER=1 run_migration
 [[ $(<"$enroll_log") == "lock |1" ]] ||
   fail "a retried migration enrolls the config a failed run edited" "$(<"$enroll_log")"
+[[ -f $machine_marker ]] ||
+  fail "a successful enrollment retry does not record machine-wide completion"
 cmp -s "$test_tmp/after-failed-enroll" "$limine_conf" ||
   fail "a retried migration edits the config again"
 pass "a migration retried after a failed enrollment enrolls the config it edited"
