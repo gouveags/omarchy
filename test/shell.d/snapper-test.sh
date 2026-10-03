@@ -134,7 +134,7 @@ if pkgs_root=$(find_omarchy_pks_root); then
 elif [[ -v OMARCHY_PKGS_PATH ]]; then
   fail "OMARCHY_PKGS_PATH resolves to an omarchy-pkgs checkout"
 else
-  pass "no omarchy-pkgs checkout; skipping packaging coverage"
+  skip "no omarchy-pkgs checkout; skipping packaging coverage"
 fi
 
 # Same per-machine checkout problem as omarchy-pkgs; OMARCHY_ISO_PATH points at it.
@@ -187,5 +187,5 @@ if iso_root=$(find_omarchy_iso_root); then
 elif [[ -v OMARCHY_ISO_PATH ]]; then
   fail "OMARCHY_ISO_PATH resolves to an omarchy-iso checkout"
 else
-  pass "no omarchy-iso checkout; skipping installer coverage"
+  skip "no omarchy-iso checkout; skipping installer coverage"
 fi

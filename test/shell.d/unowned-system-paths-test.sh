@@ -63,7 +63,7 @@ if pkgs_root is None:
   if override is not None:
     print("not ok - OMARCHY_PKGS_PATH resolves to an omarchy-pkgs checkout", file=sys.stderr)
     sys.exit(1)
-  print("ok - no omarchy-pkgs checkout; skipping package ownership check")
+  print("ok - no omarchy-pkgs checkout; skipping package ownership check # SKIP")
   sys.exit(0)
 
 packaged = "\n".join(p.read_text() for p in pkgs_root.glob("*/PKGBUILD"))

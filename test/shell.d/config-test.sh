@@ -200,7 +200,7 @@ if errors:
   sys.exit(1)
 print("ok - package-owned defaults live outside config")
 if pkgs_root is None:
-  print("ok - no omarchy-pkgs checkout; skipping PKGBUILD coverage")
+  print("ok - no omarchy-pkgs checkout; skipping PKGBUILD coverage # SKIP")
 PY
 
 grep -F 'dofile((os.getenv("OMARCHY_PATH") or "/usr/share/omarchy") .. "/default/hypr/bootstrap.lua")' "$ROOT/config/hypr/hyprland.lua" >/dev/null
