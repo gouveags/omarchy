@@ -51,8 +51,10 @@ skip_scripts = {"bin/omarchy-upgrade-to-quattro"}
 
 pkgs_candidates = [
   root.parent / "omarchy-pkgs/pkgbuilds",
+  root.parent / "omarchy/omarchy-pkgs/pkgbuilds",
   root.parent.parent / "omarchy-pkgs/pkgbuilds",
   root.parent / "omacom/omarchy-pkgs/pkgbuilds",
+  root.parent.parent / "omacom/omarchy-pkgs/pkgbuilds",
   Path.home() / "Work/omacom/omarchy-pkgs/pkgbuilds",
 ]
 override = os.environ.get("OMARCHY_PKGS_PATH")
